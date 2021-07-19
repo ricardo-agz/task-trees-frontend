@@ -1,7 +1,7 @@
 import {CHANGETHEME, SETDISPLAY} from "../Types";
 
 const initialState = {
-  display: "goal-step",
+  display: "graph",
   theme: "dark"
 }
 

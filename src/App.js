@@ -3,13 +3,26 @@ import './App.css';
 import Search from "./views/Search";
 import View from "./views/View";
 import GridLines from 'react-gridlines';
-import React from "react";
+import React, {useEffect, useState} from "react";
 import {setSearch} from "./application/actions/Search";
 import {setCurrNode} from "./application/actions/Graph";
 import {changeTheme, setDisplay} from "./application/actions/Nav";
 import {connect} from "react-redux";
 
 function App(props) {
+  const [width, setWidth] = useState(window.innerWidth);
+  const breakpoint = 675;
+  const mobile = width < breakpoint
+  const bp = 1000;
+
+  useEffect(() => {
+    const handleWindowResize = () => setWidth(window.innerWidth)
+    window.addEventListener("resize", handleWindowResize);
+    window.scrollTo(0, 0)
+    // Return a function from the effect that removes the event listener
+    return () => window.removeEventListener("resize", handleWindowResize);
+  }, []);
+
   return (
     <div
       style={{backgroundColor: props.theme === "dark" ? "#222222" : "white"}}
@@ -20,7 +33,7 @@ function App(props) {
         <div style={{flex: 1, display: "flex", flexDirection: "column",
         minHeight: "100vh"
         }}>
-          <Search />
+          <Search mobile={mobile}/>
           <View />
         </div>
       </GridLines>

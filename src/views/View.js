@@ -1,4 +1,4 @@
-import React, {useEffect, useState} from "react"
+import React, {useCallback, useEffect, useState} from "react"
 import {setSearch} from "../application/actions/Search";
 import {goBack, selectChild, setCurrNode} from "../application/actions/Graph";
 import {connect} from "react-redux";
@@ -8,45 +8,55 @@ import "./Styles.css"
 // import Tree from 'react-tree-graph';
 import Tree from 'react-d3-tree';
 
-function View(props) {
-  const [tree, setTree] = useState(null)
-  const [translate, setTranslate] = useState({x: 0, y: 0})
+const useCenteredTree = (defaultTranslate = { x: 0, y: 0 }) => {
+  const [translate, setTranslate] = useState(defaultTranslate);
+  const containerRef = useCallback((containerElem) => {
+    if (containerElem !== null) {
+      const { width, height } = containerElem.getBoundingClientRect();
+      setTranslate({ x: width / 2, y: height / 2 });
+    }
+  }, []);
+  return [translate, containerRef];
+};
 
-  useEffect(() => {
-    makeTree()
-  }, [props.currNode])
+function View(props) {
+  const [translate, containerRef] = useCenteredTree();
+  const [tree, setTree] = useState(null)
+  const [goals, setGoals] = useState(null)
+  const [currGoal, setCurrGoal] = useState(null)
+  const [currGoalChildren, setCurrGoalChildren] = useState(null)
+  const nodeSize = { x: 350, y: 200 };
+  const foreignObjectProps = { width: nodeSize.x - 75, height: nodeSize.y, x: 20 }
+
+  const baseURL = "https://wikihow-trees-backend.herokuapp.com/"
 
   function hasChildren(step) {
     return !isNaN(parseInt(step))
   }
 
-  function handleCallNode(node) {
-    props.setCurrNode(format(node))
-  }
+  const renderForeignObjectNode = ({ nodeDatum, toggleNode, foreignObjectProps }) => (
+    <g>
+      <circle r={15} fill={nodeDatum.goal ? "slategray" : props.theme === "dark" ? "rgb(6,98,191)" : "#3ba1ee"}></circle>
+      {/* `foreignObject` requires width & height to be explicitly set. */}
+      <foreignObject {...foreignObjectProps}>
+        <div style={{ borderRadius: 25, backgroundColor: props.theme === "dark" ? "rgb(6,98,191)" : "#3ba1ee", padding: 15}}>
+          <div style={{ textAlign: "center", color: "white" }}>{nodeDatum.name}</div>
 
-  useEffect(() => {
-    // const dimensions = treeContainer.getBoundingClientRect();
-
-
-  }, [])
-
-  const format = (s) => {
-    if (typeof s !== 'string') return ''
-    s =  s.toLowerCase()
-    if (s.charAt(s.length - 1) === ".") {
-      return s.charAt(0).toUpperCase() + s.slice(1)
-    } else {
-      return s.charAt(0).toUpperCase() + s.slice(1) + "."
-    }
-  }
+          {nodeDatum.children && (
+            <div style={{ width: "100%", textAlign: "center", color: "lightgray", marginTop: 10}} onClick={toggleNode}>
+              {nodeDatum.__rd3t.collapsed ? "Expand" : "Collapse"}
+            </div>
+          )}
+        </div>
+      </foreignObject>
+    </g>
+  );
 
   const renderRectSvgNode = ({ nodeDatum, toggleNode }) => (
     <g style={{}}>
       <circle cx="-10" cy="5" r="10"
-        // width="20" height="20"
-        // x="-10"
-        onClick={toggleNode} fill={nodeDatum.children &&
-        nodeDatum.children.length > 0 ? "slategray" : props.theme === "dark" ? "rgb(6,98,191)" : "#3ba1ee"}/>
+              onClick={toggleNode} fill={nodeDatum.children &&
+      nodeDatum.goal ? "slategray" : props.theme === "dark" ? "rgb(6,98,191)" : "#3ba1ee"}/>
       <text fill={props.theme === "dark" ? "white" : "black"} strokeWidth="0" x="20">
         {nodeDatum.name}
       </text>
@@ -57,149 +67,171 @@ function View(props) {
         </text>
       )}
     </g>
-    // <div
-    //   style={{
-    //     // backgroundColor: "#2b56d2",
-    //     backgroundColor: "rgb(6,98,191)",
-    //     padding: 15, borderRadius: 50, color: "white"
-    //   }}
-    //   onClick={toggleNode}
-    // >{nodeDatum.name}</div>
   );
 
-  function getNodeFromKey(key) {
-    return (props.parsedData[key])
-  }
-  function getNodeFromIndex(i) {
-    return (props.graphData[i])
-  }
-  function nodeHasChildren(key) {
-    return (props.parsedData[key] !== undefined && props.parsedData[key] !== null)
-  }
+  useEffect(() => {
+    fetch(`${baseURL}goals`)
+      .then(response => response.json())
+      .then(data => setGoals(data))
+  }, [])
 
-  function makeTree() {
+  async function makeTree() {
     let tree = {}
-    if (props.currNode !== null) {
+    if (currGoal !== null) {
       tree = {
-        name: props.currNode.goal,
+        name: currGoal.name,
+        goal: true,
+        id: currGoal.id,
         attributes: {retrievedSimilarity: null}
         // children: []
       }
-
-      tree = recMakeTree(tree, 5)
-
-      /*
-      // console.log("get: " + JSON.stringify(getNodeFromIndex(7)))
-      //
-      // console.log("this: " + JSON.stringify(props.currNode))
-
-      let curr = props.currNode;
-
-      // while (curr.children && curr.children.length > 0) {
-      //
-      // }
-
-      for (let i = 0; i < props.currNode.children.length; i++) {
-        let child = props.currNode.children[i]
-        let curr = tree
-
-
-
-        if (hasChildren(child)) {
-          tree.children[i] = {
-            name: props.graphData[parseInt(child)].goal,
-            children: []
-          };
-          for (let j = 0; j < props.graphData[parseInt(child)].children.length; j++) {
-            let subChild = props.graphData[parseInt(child)].children[j]
-            if (hasChildren(subChild)) {
-              tree.children[i].children[j] = {
-                name: props.graphData[parseInt(subChild)].goal,
-                children: []
-              };
-            } else {
-              tree.children[i].children[j] = {
-                name: subChild,
-                // children: null
-              };
-            }
-          }
-        } else {
-          tree.children[i] = {
-            name: child,
-            // children: null
-          };
-        }
-      } */
+      tree = await recMakeTreeAPI(tree, 15)
     }
     setTree(tree)
   }
 
-  function recMakeTree(tree, n) {
-    // base case
-    if (!nodeHasChildren(tree.name) || n <= 0) {
-      /*
-        name: ....
-        children: null
-       */
-      return tree
-    } else {
-      /*
-        name: ....
-        children: [, , , , ]
-       */
-      let currNode = getNodeFromKey(tree.name)
-      let currNodeIndex = currNode.index
-      let currNodeWithChildren = props.graphData[currNodeIndex]
-      tree.children = new Array(currNodeWithChildren.children.length)
-      for (let i = 0; i < tree.children.length; i++) {
-        let child = currNodeWithChildren.children[i]
-
-        if (hasChildren(child)) {
-          // console.log("parent: " + tree.name.toLowerCase())
-          // console.log("child: " + props.graphData[child].goal.toLowerCase())
-          if (props.graphData[child].goal.toLowerCase() !== tree.name.toLowerCase()) {
-            tree.children[i] = {name: props.graphData[child].goal, attributes: {retrievedSimilarity: currNode.retrieved_goals_similarity[i]}}
-            tree.children[i] = recMakeTree(tree.children[i], n-1)
-          } else {
-            tree.children[i] = {name: props.graphData[child].goal, attributes: {retrievedSimilarity: currNode.retrieved_goals_similarity[i]}}
-          }
-
-        } else {
-          tree.children[i] = {name: child, attributes: {retrievedSimilarity: currNode.retrieved_goals_similarity[i]}}
-        }
-      }
-
-      return tree
-    }
-  }
-
-  function hasMultipleLevels(node) {
-    if (!node.hasSubChildren) {
+  async function stepHasChildrenAPI(stepId) {
+    const response = await fetch(`${baseURL}goals/1/steps/${stepId}/edges`)
+    if (!response.ok) {
       return false;
     }
-    for (let i = 0; i < node.children.length; i++) {
-      if (hasChildren(node.children[i])) {
-        let child = props.graphData[node.children[i]]
-        if (child && child.goal) {
-          if (child.goal.toLowerCase() !== node.goal.toLowerCase()) {
-            if (child.hasSubChildren) {
-              return true;
-            }
+    const data = await response.json()
+    const formatted = await JSON.parse(JSON.stringify(data))
+    if (Array.isArray(formatted)) {
+      return formatted.length > 0;
+    }
+    return false;
+  }
+
+  async function getGoalChildren(goalId) {
+    const response = await fetch(`${baseURL}goals/${goalId}/steps`)
+    if (!response.ok) {
+      return null;
+    }
+    const data = await response.json()
+    const formatted = await JSON.parse(JSON.stringify(data))
+    return formatted
+  }
+
+  async function getStepChildren(stepId) {
+    const response = await fetch(`${baseURL}goals/1/steps/${stepId}/edges`)
+    if (!response.ok) {
+      return null;
+    }
+    const data = await response.json()
+    const formatted = await JSON.parse(JSON.stringify(data))
+    return formatted
+  }
+
+  async function recMakeTreeAPI(tree, n) {
+
+    // STEP
+    if (!tree.goal) {
+
+      // curr tree is STEP
+      let hasChildren = await stepHasChildrenAPI(tree.id)
+
+      // Base Case
+      if (!hasChildren || n <= 0) {
+        return tree;
+      }
+
+      // Recursive step
+      else {
+        let children = await getStepChildren(tree.id)
+        console.log("this must be here: " + JSON.stringify(children))
+
+        // edge case (error)
+        if (children === null) {
+          return tree;
+        }
+
+        tree.children = new Array(children.length)
+        for (let i = 0; i < tree.children.length; i++) {
+
+          // child is a GOAL
+          let child = children[i]
+
+          console.log("this child: " + JSON.stringify(child))
+
+          tree.children[i] = {
+            name: child.name,
+            id: child.id,
+            goal: true,
+            attributes: {retrievedSimilarity: null}
+          }
+          tree.children[i] = await recMakeTreeAPI(tree.children[i], n-1)
+        }
+
+        return tree;
+      }
+    }
+
+    // GOAL
+    else {
+      // curr tree is GOAL
+      let children = await getGoalChildren(tree.id)
+
+      // edge case (error)
+      if (children === null) {
+        return tree;
+      }
+
+      tree.children = new Array(children.length)
+      for (let i = 0; i < tree.children.length; i++) {
+        // child is a STEP
+        let child = children[i]
+        let hasChildren = await stepHasChildrenAPI(child.id)
+
+        if (hasChildren) {
+          tree.children[i] = {
+            name: child.name,
+            id: child.id,
+            goal: false,
+            attributes: {retrievedSimilarity: null}
+          }
+          tree.children[i] = await recMakeTreeAPI(tree.children[i], n-1)
+        } else {
+          tree.children[i] = {
+            name: child.name,
+            id: child.id,
+            goal: false,
+            attributes: {retrievedSimilarity: null}
           }
         }
       }
     }
-    return false
+
+    return tree;
   }
+
+  async function handleClickGoal(goal) {
+    setCurrGoal(goal)
+    await makeTree()
+  }
+
+  useEffect(() => {
+    if (props.currNode) {
+      fetch(`${baseURL}goals/${props.currNode}`)
+        .then(response => response.json())
+        .then(data => {setCurrGoal(data)})
+    }
+  }, [props.currNode])
+
+  useEffect(async () => {
+    if (currGoal) {
+      await makeTree()
+      let children = await getGoalChildren(currGoal.id)
+      setCurrGoalChildren(children)
+    }
+  }, [currGoal])
 
   return (
     <div style={{height: "100%", flex: 1}}>
 
       <div style={{width: "100vw", height: 35, display: "flex", overflow: "hidden", overflowX: "scroll", marginTop: 10, marginBottom: 10}}
            className={"scrollView"}>
-        {props.graphData.map((node) => (
-          hasMultipleLevels(node) &&
+        {goals && goals.map((node) => (
           <div
             style={{
               backgroundColor: props.theme === "dark" ? "rgb(6,98,191)" : "#3ba1ee",
@@ -212,12 +244,16 @@ function View(props) {
               marginLeft: 5,
               marginRight: 5
             }}
-            onClick={() => handleCallNode(node.goal)}
-          >{node.goal.length > 30 ? node.goal.slice(0, 30) + "..." : node.goal}</div>
-
-          // <ScrollNode node={node}/>
+            onClick={async () => await handleClickGoal(node)}
+          >
+            {node.name.length > 30 ? node.name.slice(0, 30) + "..." : node.name}
+          </div>
         ))}
       </div>
+
+
+
+
 
       { props.display === "goal-step" ?
       <div style={{display: "flex", flex: 1, height: "100%"}}>
@@ -232,80 +268,155 @@ function View(props) {
           </div>
           }
 
-          {props.currNode !== null && typeof props.currNode !== "string" &&
+          {currGoal &&
           <div
             style={{
-              // backgroundColor: "#2b56d2",
               backgroundColor: props.theme === "dark" ? "rgb(6,98,191)" : "#3ba1ee",
               padding: 15, borderRadius: 50, color: "white"
             }}
-          >{props.currNode == null ? "null" : props.currNode.goal}</div>
+          >{currGoal === null ? "null" : currGoal.name}</div>
           }
         </div>
 
         <div style={{flex: 1, display: "flex", alignItems: "center", justifyContent: "center"}}>
-          <div>{
-            props.currNode !== null && typeof(props.currNode) !== "string" &&
-            <div>{props.currNode.children.map((step, index) => (
-              <div style={{display: "flex", alignItems: "center"}}>
-                <div
-                  className={"similarity"}
-                  style={{color: "white", fontSize: 12}}
-                >
-                  { parseFloat(props.currNode.retrieved_goals_similarity[index]).toFixed(2) }
-                </div>
+          <div>{currGoalChildren &&
 
-                <div
-                  style={{
-                    backgroundColor:props.theme === "dark" ? "rgb(6,98,191)" : "#3ba1ee",
-                    padding: 15,
-                    borderRadius: 50, color: "white", margin: 10,
-                    height: 10,
-                    display: "flex",
-                    alignItems: "center"
-                  }}
-                >
+            currGoalChildren.map((child, index) => (
+              <div>{"bruh"}</div>
+            ))
 
-                  { hasChildren(step) ?
-                    props.graphData[parseInt(step)].goal : step
-                  }
-                </div>
+            // null
 
-                {hasChildren(step) &&
-                <div
-                  className={"plusButton"}
-                  onClick={() => props.selectChild(parseInt(step))}
-                >
-                  <AddIcon style={{color: "white"}}/>
-                </div>
-                }
-              </div>
-            ))}</div>
+          //   currGoalChildren.map((step, index) => (
+          //   <div style={{display: "flex", alignItems: "center"}}>
+          //     <div
+          //       className={"similarity"}
+          //       style={{color: "white", fontSize: 12}}
+          //     >
+          //       {/*{ parseFloat(props.currNode.retrieved_goals_similarity[index]).toFixed(2) }*/}
+          //     </div>
+          //
+          //     <div
+          //       style={{
+          //         backgroundColor:props.theme === "dark" ? "rgb(6,98,191)" : "#3ba1ee",
+          //         padding: 15,
+          //         borderRadius: 50, color: "white", margin: 10,
+          //         height: 10,
+          //         display: "flex",
+          //         alignItems: "center"
+          //       }}
+          //     >
+          //
+          //       { step.name }
+          //     </div>
+          //
+          //     { stepHasChildrenAPI(step.id).then(res => {
+          //       return (res &&
+          //         <div
+          //           className={"plusButton"}
+          //           onClick={() => props.selectChild(parseInt(step))}
+          //         >
+          //           <AddIcon style={{color: "white"}}/>
+          //         </div>)
+          //     })
+          //     }
+          //
+          //     {/*{hasChildren(step) &&*/}
+          //     {/*<div*/}
+          //     {/*  className={"plusButton"}*/}
+          //     {/*  onClick={() => props.selectChild(parseInt(step))}*/}
+          //     {/*>*/}
+          //     {/*  <AddIcon style={{color: "white"}}/>*/}
+          //     {/*</div>*/}
+          //     {/*}*/}
+          //   </div>
+          // ))
+
           }</div>
+
+          {/*<div>{*/}
+          {/*  props.currNode !== null && typeof(props.currNode) !== "string" &&*/}
+          {/*  <div>{currGoalChildren && currGoalChildren.map((step, index) => (*/}
+          {/*    <div style={{display: "flex", alignItems: "center"}}>*/}
+          {/*      <div*/}
+          {/*        className={"similarity"}*/}
+          {/*        style={{color: "white", fontSize: 12}}*/}
+          {/*      >*/}
+          {/*        /!*{ parseFloat(props.currNode.retrieved_goals_similarity[index]).toFixed(2) }*!/*/}
+          {/*      </div>*/}
+
+          {/*      <div*/}
+          {/*        style={{*/}
+          {/*          backgroundColor:props.theme === "dark" ? "rgb(6,98,191)" : "#3ba1ee",*/}
+          {/*          padding: 15,*/}
+          {/*          borderRadius: 50, color: "white", margin: 10,*/}
+          {/*          height: 10,*/}
+          {/*          display: "flex",*/}
+          {/*          alignItems: "center"*/}
+          {/*        }}*/}
+          {/*      >*/}
+
+          {/*        { step.name }*/}
+          {/*      </div>*/}
+
+          {/*      { stepHasChildrenAPI(step.id).then(res => {*/}
+          {/*        return (res &&*/}
+          {/*          <div*/}
+          {/*            className={"plusButton"}*/}
+          {/*            onClick={() => props.selectChild(parseInt(step))}*/}
+          {/*          >*/}
+          {/*            <AddIcon style={{color: "white"}}/>*/}
+          {/*          </div>)*/}
+          {/*      })*/}
+          {/*      }*/}
+
+          {/*      /!*{hasChildren(step) &&*!/*/}
+          {/*      /!*<div*!/*/}
+          {/*      /!*  className={"plusButton"}*!/*/}
+          {/*      /!*  onClick={() => props.selectChild(parseInt(step))}*!/*/}
+          {/*      /!*>*!/*/}
+          {/*      /!*  <AddIcon style={{color: "white"}}/>*!/*/}
+          {/*      /!*</div>*!/*/}
+          {/*      /!*}*!/*/}
+          {/*    </div>*/}
+          {/*  ))}</div>*/}
+          {/*}</div>*/}
         </div>
       </div>
 
       :
 
         <div>
+
+
+
           {tree && tree !== {} &&
-          <div style={{ width: '100vw', height: '90vh' }}>
+          <div style={{ width: '100vw', height: '85vh' }} ref={containerRef}>
             <Tree
               data={tree}
               rootNodeClassName="node__root"
               branchNodeClassName="node__branch"
               leafNodeClassName="node__leaf"
               style={{color: "white"}}
-              // renderCustomNodeElement={({ nodeDatum, toggleNode }) => {(<div style={{width: 30, height: 30, backgroundColor: "red"}}></div>)}}
-              renderCustomNodeElement={renderRectSvgNode}
-              // height={800}
-              // separation={{nonSiblings: 100, siblings: 200}}
-              // width={800}
-              // orientation={"vertical"}
-              // animated
+              nodeSize={nodeSize}
+              renderCustomNodeElement={(rd3tProps) =>
+                renderForeignObjectNode({ ...rd3tProps, foreignObjectProps })
+              }
+              orientation="vertical"
+              translate={translate}
             />
           </div>
           }
+
+          {/* Legend */}
+          <div style={{display: "flex", marginLeft: 15, position: "fixed", left: 15, bottom: 15}}>
+            <div style={{marginRight: 20, color: props.theme === "dark" ? "white" : "black"}}>legend:</div>
+            <div style={{backgroundColor: 'slategray', width: 25, height: 25, borderRadius: 25, marginRight: 10}}/>
+            <div style={{marginRight: 15, color: props.theme === "dark" ? "white" : "black"}}>goal</div>
+            <div style={{backgroundColor: props.theme === "dark" ? "rgb(6,98,191)" : "#3ba1ee", width: 25, height: 25, borderRadius: 25, marginRight: 10}}/>
+            <div style={{marginRight: 15, color: props.theme === "dark" ? "white" : "black"}}>step</div>
+          </div>
+
         </div>
 
       }
@@ -313,42 +424,6 @@ function View(props) {
 
     </div>
   )
-
-  // if (props.display === "goal-step") {
-  //   return (
-  //
-  //   )
-  // } else {
-  //
-  // }
-
-  // return (
-    // <div>
-    //   {JSON.stringify(props.currNode)}
-    //   <div style={{color: "white"}}>
-    //     {/*{JSON.stringify(props.graphData[2])}*/}
-    //     {props.currNode !== null && props.currNode.children &&
-    //       <div>
-    //         {props.currNode.children.map((child) => (
-    //           <div>
-    //             {child}
-    //           </div>
-    //         ))}
-    //       </div>
-    //     }
-    //   </div>
-    //   {/*{props.currNode !== null && props.currNode.children &&*/}
-    //   {/*  <div>*/}
-    //   {/*    {props.currNode.children.map((child) => (*/}
-    //   {/*      <div>*/}
-    //   {/*        Bruh*/}
-    //   {/*        {JSON.stringify(child)}*/}
-    //   {/*      </div>*/}
-    //   {/*    ))}*/}
-    //   {/*  </div>*/}
-    //   {/*}*/}
-    // </div>
-  // )
 }
 
 /* Redux */

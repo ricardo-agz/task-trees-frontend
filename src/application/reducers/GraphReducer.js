@@ -34,12 +34,12 @@ const graphReducer = (state = initialState, action) => {
         currNode: state.graphData[action.data]
       }
     case SETCURRNODE:
-      let item = state.parsedData[action.data]
-      let index = typeof(item) !== "undefined" ? item.index : null
+      // let item = state.parsedData[action.data]
+      // let index = typeof(item) !== "undefined" ? item.index : null
       return {
         ...state,
         prevNode: null,
-        currNode: index !== null ? state.graphData[index] : null
+        currNode: action.data
       }
     default:
       return state;
